@@ -9,8 +9,10 @@ async function pedir(metodo, ruta, cuerpo) {
       headers: cuerpo ? { "Content-Type": "application/json" } : {},
       body: cuerpo ? JSON.stringify(cuerpo) : undefined,
     });
-  } catch {
-    throw new Error("No se pudo conectar con la API");
+  } catch (causa) {
+    const error = new Error("No se pudo conectar con la API");
+    window.monitoreo.error(error, { metodo, ruta, causa: String(causa) });
+    throw error;
   }
 
   if (respuesta.status === 204) return null;
@@ -18,6 +20,13 @@ async function pedir(metodo, ruta, cuerpo) {
   if (!respuesta.ok) {
     const error = new Error(datos?.error || `Error ${respuesta.status}`);
     error.status = respuesta.status;
+    const contexto = { metodo, ruta, status: respuesta.status };
+    if (respuesta.status >= 500) {
+      window.monitoreo.error(error, contexto);
+    } else if (!(metodo === "GET" && respuesta.status === 404)) {
+      // Un GET 404 es normal mientras un endpoint no existe; el resto se registra.
+      window.monitoreo.advertencia(`API rechazó ${metodo} ${ruta}: ${error.message}`, contexto);
+    }
     throw error;
   }
   return datos;

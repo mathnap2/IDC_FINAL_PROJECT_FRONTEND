@@ -9,6 +9,7 @@ Se sirve con **nginx** dentro de un contenedor Docker.
 |---|---|
 | `index.html` | Esqueleto de la página: encabezado, contenedor de vistas y avisos |
 | `config.js` | URL de la API y ambiente. En el contenedor se **regenera al arrancar** con las variables de entorno |
+| `js/monitoreo.js` | Carga Sentry desde su CDN (con hash de integridad) si hay `SENTRY_DSN` |
 | `js/api.js` | `fetch` hacia la API; convierte `{"error": "..."}` en una excepción con ese mensaje |
 | `js/app.js` | Vistas (inicio de sesión, grupos, detalle de grupo, mi cuenta) y navegación por `#/ruta` |
 | `css/styles.css` | Estilos |
@@ -25,7 +26,7 @@ La misma imagen sirve para dev y prod: lo que cambia son las variables de entorn
 |---|---|
 | `API_URL` | `https://app-cc-api-dev-4yzr.azurewebsites.net` |
 | `APP_ENV` (o `SENTRY_ENVIRONMENT`) | `dev` / `prod` — se muestra como etiqueta en el encabezado |
-| `SENTRY_DSN` | DSN del proyecto de Sentry del frontend (opcional) |
+| `SENTRY_DSN` | DSN del proyecto `cuentas-claras-frontend` en Sentry (opcional) |
 
 ## Correr en local
 
@@ -59,3 +60,11 @@ Los cuerpos marcados con ⚠️ son **propuesta** y hay que confirmarlos con qui
 
 Si un endpoint todavía no existe en el backend, la sección correspondiente muestra "Aún no disponible"
 en lugar de romper la página.
+
+## Monitoreo (Sentry)
+
+- **Issues:** errores de JavaScript no controlados, la API caída o respuestas 500.
+- **Trazas:** carga de la página y llamadas a la API; el id de la traza viaja al backend, así que en Sentry
+  se ve el recorrido completo navegador → API.
+- **Logs:** cuando la API rechaza una operación (400, 409...) se registra el mensaje como advertencia.
+- **Session Replay:** solo de las sesiones en las que ocurre un error.
