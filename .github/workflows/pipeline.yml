@@ -1,0 +1,177 @@
+# Pipeline del frontend (issues #8-#11)
+#
+#   PR a develop/main  ──► ci (construye la imagen y prueba el contenedor)
+#   push a develop     ──► ci ─► build (:dev, :sha-<commit>) ─► deploy-dev
+#   push a main        ──► ci ─► build (:latest, :sha-<commit>) ─► deploy-prod (espera aprobación)
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+# Environments: dev, production (production con Required reviewers = aprobación manual).
+
+name: Pipeline frontend
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGEN: mathnap2/cuentas-claras-front
+  # Nombres de las Web Apps: `terraform output webapp_names` en el repo de infraestructura.
+  WEBAPP_DEV: app-cc-web-dev-4yzr
+  WEBAPP_PROD: app-cc-web-prod-4yzr
+
+jobs:
+  ci:
+    name: Construir y probar el contenedor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Revisar sintaxis de JavaScript y del script de arranque
+        run: |
+          for f in js/*.js; do node --check "$f" 2>/dev/null || node --input-type=module --check < "$f"; done
+          sh -n docker/40-config.sh
+
+      - name: Construir imagen
+        run: docker build -t cc-front:ci .
+
+      - name: Prueba de humo del contenedor
+        run: |
+          docker run -d --name front -p 8080:80 \
+            -e API_URL=https://api.ejemplo.test -e SENTRY_ENVIRONMENT=ci cc-front:ci
+          for i in $(seq 1 15); do curl -fsS http://localhost:8080/ >/dev/null && break; sleep 1; done
+
+          echo "--- config.js generado por el contenedor"
+          curl -fsS http://localhost:8080/config.js | tee config.out
+          grep -q 'API_URL: "https://api.ejemplo.test"' config.out
+          grep -q 'AMBIENTE: "ci"' config.out
+          curl -fsSI http://localhost:8080/config.js | grep -qi 'cache-control: no-store'
+
+          echo "--- index.html, estilos y scripts"
+          curl -fsS http://localhost:8080/ | grep -q '<title>Cuentas Claras</title>'
+          for ruta in css/styles.css js/app.js js/api.js js/monitoreo.js; do
+            curl -fsS -o /dev/null "http://localhost:8080/$ruta"
+          done
+          echo "Contenedor OK"
+
+      - name: Logs del contenedor
+        if: always()
+        run: docker logs front || true
+
+  build:
+    name: Build y push a Docker Hub
+    needs: ci
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      imagen: ${{ steps.tags.outputs.imagen }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Calcular etiquetas
+        id: tags
+        run: |
+          # develop → :dev   main → :latest   siempre → :sha-<commit> (la que se despliega)
+          if [ "$GITHUB_REF_NAME" = "main" ]; then canal=latest; else canal=dev; fi
+          echo "imagen=$IMAGEN:sha-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "lista<<FIN"
+            echo "$IMAGEN:sha-$GITHUB_SHA"
+            echo "$IMAGEN:$canal"
+            echo "FIN"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.lista }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Resumen
+        run: |
+          echo "### Imagen publicada" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.tags.outputs.lista }}" | sed 's/^/- `/; s/$/`/' >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-dev:
+    name: Deploy a dev
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: https://${{ env.WEBAPP_DEV }}.azurewebsites.net
+    permissions:
+      id-token: write   # OIDC con Azure (ver identity.tf en el repo de infraestructura)
+      contents: read
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.WEBAPP_DEV }}
+          images: docker.io/${{ needs.build.outputs.imagen }}
+
+      - name: Verificar que dev responde
+        run: |
+          url="https://$WEBAPP_DEV.azurewebsites.net/config.js"
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 30 "$url"; then echo; echo "Dev responde"; exit 0; fi
+            echo "Intento $i: todavía no responde, reintento en 10 s"; sleep 10
+          done
+          echo "Dev no respondió en 5 minutos"; exit 1
+
+  deploy-prod:
+    name: Deploy a producción
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # El environment production tiene Required reviewers: el job espera la aprobación manual.
+    environment:
+      name: production
+      url: https://${{ env.WEBAPP_PROD }}.azurewebsites.net
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.WEBAPP_PROD }}
+          images: docker.io/${{ needs.build.outputs.imagen }}
+
+      - name: Verificar que producción responde
+        run: |
+          url="https://$WEBAPP_PROD.azurewebsites.net/config.js"
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 30 "$url"; then echo; echo "Producción responde"; exit 0; fi
+            echo "Intento $i: todavía no responde, reintento en 10 s"; sleep 10
+          done
+          echo "Producción no respondió en 5 minutos"; exit 1

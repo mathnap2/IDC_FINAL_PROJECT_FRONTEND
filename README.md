@@ -38,6 +38,19 @@ docker run --rm -p 8080:80 -e API_URL=http://localhost:8000 -e APP_ENV=local cue
 Y abrir http://localhost:8080. Sin Docker basta con cualquier servidor estático
 (`python -m http.server 8080`); en ese caso se usa el `config.js` del repo.
 
+## Pipeline (GitHub Actions)
+
+`.github/workflows/pipeline.yml`:
+
+| Evento | Jobs |
+|---|---|
+| PR a `develop` o `main` | `ci`: revisa la sintaxis, construye la imagen y prueba el contenedor (config.js generado, página y scripts servidos) |
+| Push a `develop` | `ci` → `build` (`:dev` y `:sha-<commit>`) → `deploy-dev` |
+| Push a `main` | `ci` → `build` (`:latest` y `:sha-<commit>`) → `deploy-prod` (espera aprobación del environment `production`) |
+
+La imagen se publica como `mathnap2/cuentas-claras-front` y se despliega la etiqueta `:sha-<commit>`. El login a
+Azure es por OIDC. Si cambian los nombres de las Web Apps, se actualizan en `env:` al inicio del workflow.
+
 ## Contrato de API que usa el frontend
 
 Las rutas son las del backend. El dinero viaja como texto (`"33.34"`) y las fechas como `YYYY-MM-DD`.
