@@ -73,8 +73,6 @@ jobs:
     needs: ci
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    outputs:
-      imagen: ${{ steps.tags.outputs.imagen }}
     steps:
       - uses: actions/checkout@v4
 
@@ -132,7 +130,9 @@ jobs:
       - uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.WEBAPP_DEV }}
-          images: docker.io/${{ needs.build.outputs.imagen }}
+          # El nombre se arma aquí y no se recibe del job build: GitHub descarta los outputs que
+          # contienen el valor de un secret, y la imagen incluye DOCKERHUB_USERNAME (mathnap2).
+          images: docker.io/${{ env.IMAGEN }}:sha-${{ github.sha }}
 
       - name: Verificar que dev responde
         run: |
@@ -165,7 +165,9 @@ jobs:
       - uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.WEBAPP_PROD }}
-          images: docker.io/${{ needs.build.outputs.imagen }}
+          # El nombre se arma aquí y no se recibe del job build: GitHub descarta los outputs que
+          # contienen el valor de un secret, y la imagen incluye DOCKERHUB_USERNAME (mathnap2).
+          images: docker.io/${{ env.IMAGEN }}:sha-${{ github.sha }}
 
       - name: Verificar que producción responde
         run: |
