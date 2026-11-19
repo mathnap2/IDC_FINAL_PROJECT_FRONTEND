@@ -3,6 +3,11 @@
 Interfaz web sencilla (HTML, CSS y JavaScript sin frameworks) que consume la API de Cuentas Claras.
 Se sirve con **nginx** dentro de un contenedor Docker.
 
+> 📋 **Tablero del proyecto:** [Cuentas Claras](https://github.com/users/angelcortes1705/projects/3)
+> · Repos: [backend](https://github.com/mathnap2/IDC_FINAL_PROJECT)
+> · [frontend](https://github.com/mathnap2/IDC_FINAL_PROJECT_FRONTEND)
+> · [infraestructura](https://github.com/mathnap2/IDC_FINAL_PROJECT_TERRAFORM)
+
 ## Estructura
 
 | Archivo | Qué hace |
