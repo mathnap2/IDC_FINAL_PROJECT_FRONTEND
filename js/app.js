@@ -159,7 +159,6 @@ async function vistaGrupo(id) {
 
   const nombre = Object.fromEntries(usuarios.map((u) => [u.id, u.nombre]));
   const miembros = grupo.miembros;
-  const noMiembros = usuarios.filter((u) => !miembros.some((m) => m.id === u.id));
   const opcionesMiembros = (sel) =>
     miembros.map((m) => `<option value="${m.id}" ${m.id === sel ? "selected" : ""}>${esc(m.nombre)}</option>`).join("");
   const noDisponible = `<p class="vacio">Aún no disponible.</p>`;
@@ -198,11 +197,10 @@ async function vistaGrupo(id) {
               ${m.id !== grupo.creado_por ? `<button class="enlace quitar" data-id="${m.id}">Quitar</button>` : "<small>(creador)</small>"}
             </li>`).join("")}
         </ul>
-        ${noMiembros.length ? `
-          <form id="f-miembro" class="en-linea">
-            <select name="usuario_id">${noMiembros.map((u) => `<option value="${u.id}">${esc(u.nombre)} (${esc(u.email)})</option>`).join("")}</select>
-            <button>Agregar</button>
-          </form>` : ""}
+        <form id="f-miembro" class="en-linea">
+          <input type="email" name="email" placeholder="Correo con el que se registró" aria-label="Correo del nuevo miembro" required>
+          <button>Agregar</button>
+        </form>
       </section>
     </div>
 
@@ -276,7 +274,12 @@ async function vistaGrupo(id) {
   // --- miembros ---
   document.getElementById("f-miembro")?.addEventListener("submit", (e) => {
     e.preventDefault();
-    accion(() => api.post(`/api/grupos/${id}/miembros/${datosForm(e.target).usuario_id}`), "Miembro agregado");
+    // Se busca el correo en la lista de usuarios registrados (sin distinguir mayúsculas).
+    const correo = datosForm(e.target).email.trim().toLowerCase();
+    const encontrado = usuarios.find((u) => u.email.toLowerCase() === correo);
+    if (!encontrado) return aviso("No hay ninguna cuenta registrada con ese correo en este ambiente");
+    if (miembros.some((m) => m.id === encontrado.id)) return aviso(`${encontrado.nombre} ya es miembro del grupo`);
+    accion(() => api.post(`/api/grupos/${id}/miembros/${encontrado.id}`), `${encontrado.nombre} agregado al grupo`);
   });
   app.querySelectorAll(".quitar").forEach((b) =>
     b.addEventListener("click", () => accion(() => api.del(`/api/grupos/${id}/miembros/${b.dataset.id}`), "Miembro quitado")));
