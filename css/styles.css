@@ -128,6 +128,10 @@ ul { padding-left: 0; list-style: none; margin: 0; }
 .miembros li, .saldos li { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--borde); flex-wrap: wrap; }
 .saldos li span:last-child { margin-left: auto; }
 .miembros li button, .miembros li small:last-child { margin-left: auto; }
+.deudas { list-style: none; padding: 0; margin: 0; }
+.deudas li { display: flex; gap: 8px; align-items: center; padding: 6px 0; flex-wrap: wrap; }
+.deudas li button { margin-left: auto; padding: 6px 14px; }
+button:disabled { opacity: .6; cursor: progress; }
 .positivo { color: var(--positivo); font-weight: 600; }
 .negativo { color: var(--negativo); font-weight: 600; }
 
