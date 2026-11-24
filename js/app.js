@@ -185,7 +185,12 @@ async function vistaGrupo(id) {
 
         <h3>Forma más simple de saldar</h3>
         ${deudas ? (deudas.length
-          ? `<ul>${deudas.map((d) => `<li>${esc(nombre[d.de_usuario])} paga ${dinero(d.monto)} a ${esc(nombre[d.a_usuario])}</li>`).join("")}</ul>`
+          ? `<ul class="deudas">${deudas.map((d) => `<li>
+              <span>${esc(nombre[d.de_usuario])} paga ${dinero(d.monto)} a ${esc(nombre[d.a_usuario])}</span>
+              ${d.de_usuario === usuario.id
+                ? `<button class="pagar-deuda" data-a="${d.a_usuario}" data-monto="${esc(d.monto)}">Pagar</button>`
+                : ""}
+            </li>`).join("")}</ul>`
           : `<p class="vacio">Nadie le debe nada a nadie.</p>`) : noDisponible}
       </section>
 
@@ -319,6 +324,18 @@ async function vistaGrupo(id) {
   });
   app.querySelectorAll(".borrar-pago").forEach((b) =>
     b.addEventListener("click", () => accion(() => api.del(`/api/pagos/${b.dataset.id}`), "Pago eliminado")));
+
+  // Pagar con un toque la deuda que le toca al usuario en sesión según la forma más simple de saldar.
+  app.querySelectorAll(".pagar-deuda").forEach((b) =>
+    b.addEventListener("click", () => {
+      b.disabled = true; // evita registrar el pago dos veces con doble clic
+      const a = Number(b.dataset.a);
+      accion(() => api.post(`/api/grupos/${id}/pagos`, {
+        de_usuario: usuario.id,
+        a_usuario: a,
+        monto: b.dataset.monto,
+      }), `Pagaste ${dinero(b.dataset.monto)} a ${nombre[a]}`);
+    }));
 }
 
 function vistaCuenta() {
